@@ -25,6 +25,7 @@ import (
 	"fmt"
 	"hash/crc32"
 	"io"
+	"log"
 	"net/http"
 	"sort"
 	"time"
@@ -275,6 +276,7 @@ func (a completedParts) Less(i, j int) bool { return a[i].PartNumber < a[j].Part
 func (c *Client) PutObject(ctx context.Context, bucketName, objectName string, reader io.Reader, objectSize int64,
 	opts PutObjectOptions,
 ) (info UploadInfo, err error) {
+	log.Println("PutObject", bucketName, objectName, objectSize)
 	if objectSize < 0 && opts.DisableMultipart {
 		return UploadInfo{}, errors.New("object size must be provided with disable multipart upload")
 	}
@@ -284,10 +286,12 @@ func (c *Client) PutObject(ctx context.Context, bucketName, objectName string, r
 		return UploadInfo{}, err
 	}
 
+	log.Println("Passing to putObjectCommon", bucketName, objectName, objectSize)
 	return c.putObjectCommon(ctx, bucketName, objectName, reader, objectSize, opts)
 }
 
 func (c *Client) putObjectCommon(ctx context.Context, bucketName, objectName string, reader io.Reader, size int64, opts PutObjectOptions) (info UploadInfo, err error) {
+	log.Println("putObjectCommon", bucketName, objectName)
 	// Check for largest object size allowed.
 	if size > int64(maxMultipartPutObjectSize) {
 		return UploadInfo{}, errEntityTooLarge(size, maxMultipartPutObjectSize, bucketName, objectName)
@@ -305,8 +309,10 @@ func (c *Client) putObjectCommon(ctx context.Context, bucketName, objectName str
 
 	if c.overrideSignerType.IsV2() {
 		if size >= 0 && size < int64(partSize) || opts.DisableMultipart {
+			log.Println("Passing to putObject", bucketName, objectName)
 			return c.putObject(ctx, bucketName, objectName, reader, size, opts)
 		}
+		log.Println("Passing to putObjectMultipart", bucketName, objectName)
 		return c.putObjectMultipart(ctx, bucketName, objectName, reader, size, opts)
 	}
 
@@ -315,15 +321,18 @@ func (c *Client) putObjectCommon(ctx context.Context, bucketName, objectName str
 			return UploadInfo{}, errors.New("no length provided and multipart disabled")
 		}
 		if opts.ConcurrentStreamParts && opts.NumThreads > 1 {
+			log.Println("Passing to putObjectMultipartStreamParallel", bucketName, objectName)
 			return c.putObjectMultipartStreamParallel(ctx, bucketName, objectName, reader, opts)
 		}
+		log.Println("Passing to putObjectMultipartStreamNoLength", bucketName, objectName)
 		return c.putObjectMultipartStreamNoLength(ctx, bucketName, objectName, reader, opts)
 	}
 
 	if size < int64(partSize) || opts.DisableMultipart {
+		log.Println("Passing to putObject2", bucketName, objectName)
 		return c.putObject(ctx, bucketName, objectName, reader, size, opts)
 	}
-
+	log.Println("Passing to putObjectMultipartStream", bucketName, objectName)
 	return c.putObjectMultipartStream(ctx, bucketName, objectName, reader, size, opts)
 }
 

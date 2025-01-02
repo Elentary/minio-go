@@ -25,6 +25,7 @@ import (
 	"fmt"
 	"hash/crc32"
 	"io"
+	"log"
 	"math/rand"
 	"net"
 	"net/http"
@@ -572,6 +573,7 @@ var successStatus = []int{
 // request upon any error up to maxRetries attempts in a binomially
 // delayed manner using a standard back off algorithm.
 func (c *Client) executeMethod(ctx context.Context, method string, metadata requestMetadata) (res *http.Response, err error) {
+	log.Println("executeMethod", method, fmt.Sprintf("%+v", metadata))
 	if c.IsOffline() {
 		return nil, errors.New(c.endpointURL.String() + " is offline.")
 	}
@@ -606,8 +608,12 @@ func (c *Client) executeMethod(ctx context.Context, method string, metadata requ
 
 	// Indicate to our routine to exit cleanly upon return.
 	defer cancel()
-
+	log.Println("Start loop")
+	var cnt int
+	cnt = 0
 	for range c.newRetryTimer(retryCtx, reqRetry, DefaultRetryUnit, DefaultRetryCap, MaxJitter) {
+		log.Println("attempt", cnt)
+		cnt += 1
 		// Retry executes the following function body if request has an
 		// error until maxRetries have been exhausted, retry attempts are
 		// performed after waiting for a given period of time in a
@@ -642,20 +648,23 @@ func (c *Client) executeMethod(ctx context.Context, method string, metadata requ
 
 			return nil, err
 		}
-
+		log.Println("initiating request")
 		// Initiate the request.
 		res, err = c.do(req)
 		if err != nil {
 			if isRequestErrorRetryable(err) {
 				// Retry the request
+				log.Println("retrying", err, err.Error())
 				continue
 			}
+			log.Println("can not retry")
 			return nil, err
 		}
 
 		// For any known successful http status, return quickly.
 		for _, httpStatus := range successStatus {
 			if httpStatus == res.StatusCode {
+				log.Println("success")
 				return res, nil
 			}
 		}
@@ -665,6 +674,7 @@ func (c *Client) executeMethod(ctx context.Context, method string, metadata requ
 		// res.Body should be closed
 		closeResponse(res)
 		if err != nil {
+			log.Println("return after read body")
 			return nil, err
 		}
 
@@ -685,6 +695,7 @@ func (c *Client) executeMethod(ctx context.Context, method string, metadata requ
 		//
 		// Additionally, we should only retry if bucketLocation and custom
 		// region is empty.
+		log.Println("before region detection")
 		if c.region == "" {
 			switch errResponse.Code {
 			case "AuthorizationHeaderMalformed":
@@ -715,6 +726,7 @@ func (c *Client) executeMethod(ctx context.Context, method string, metadata requ
 				}
 			}
 		}
+		log.Println("after region detection")
 
 		// Verify if error response code is retryable.
 		if isS3CodeRetryable(errResponse.Code) {
@@ -732,9 +744,10 @@ func (c *Client) executeMethod(ctx context.Context, method string, metadata requ
 
 	// Return an error when retry is canceled or deadlined
 	if e := retryCtx.Err(); e != nil {
+		log.Println("returning ERROR from executeMethod")
 		return nil, e
 	}
-
+	log.Println("returning from executeMethod")
 	return res, err
 }
 

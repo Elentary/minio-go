@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"hash/crc32"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"sort"
@@ -45,12 +46,16 @@ import (
 func (c *Client) putObjectMultipartStream(ctx context.Context, bucketName, objectName string,
 	reader io.Reader, size int64, opts PutObjectOptions,
 ) (info UploadInfo, err error) {
+	log.Println("putObjectMultipartStream", bucketName, objectName)
 	if opts.ConcurrentStreamParts && opts.NumThreads > 1 {
+		log.Println("Passing to putObjectMultipartStreamParallel", bucketName, objectName)
 		info, err = c.putObjectMultipartStreamParallel(ctx, bucketName, objectName, reader, opts)
 	} else if !isObject(reader) && isReadAt(reader) && !opts.SendContentMd5 {
 		// Verify if the reader implements ReadAt and it is not a *minio.Object then we will use parallel uploader.
+		log.Println("Passing to putObjectMultipartStreamFromReadAt", bucketName, objectName)
 		info, err = c.putObjectMultipartStreamFromReadAt(ctx, bucketName, objectName, reader.(io.ReaderAt), size, opts)
 	} else {
+		log.Println("Passing to putObjectMultipartStreamOptionalChecksum", bucketName, objectName)
 		info, err = c.putObjectMultipartStreamOptionalChecksum(ctx, bucketName, objectName, reader, size, opts)
 	}
 	if err != nil {
@@ -63,6 +68,7 @@ func (c *Client) putObjectMultipartStream(ctx context.Context, bucketName, objec
 				return UploadInfo{}, errEntityTooLarge(size, maxSinglePutObjectSize, bucketName, objectName)
 			}
 			// Fall back to uploading as single PutObject operation.
+			log.Println("Passing to putObject", bucketName, objectName)
 			return c.putObject(ctx, bucketName, objectName, reader, size, opts)
 		}
 	}
@@ -656,6 +662,7 @@ func (c *Client) putObjectMultipartStreamParallel(ctx context.Context, bucketNam
 // putObject special function used Google Cloud Storage. This special function
 // is used for Google Cloud Storage since Google's multipart API is not S3 compatible.
 func (c *Client) putObject(ctx context.Context, bucketName, objectName string, reader io.Reader, size int64, opts PutObjectOptions) (info UploadInfo, err error) {
+	log.Println("putObject", bucketName, objectName)
 	// Input validation.
 	if err := s3utils.CheckValidBucketName(bucketName); err != nil {
 		return UploadInfo{}, err
@@ -726,12 +733,14 @@ func (c *Client) putObject(ctx context.Context, bucketName, objectName string, r
 
 	// This function does not calculate sha256 and md5sum for payload.
 	// Execute put object.
+	log.Println("Passing to putObjectDo", bucketName, objectName)
 	return c.putObjectDo(ctx, bucketName, objectName, progressReader, md5Base64, "", size, opts)
 }
 
 // putObjectDo - executes the put object http operation.
 // NOTE: You must have WRITE permissions on a bucket to add an object to it.
 func (c *Client) putObjectDo(ctx context.Context, bucketName, objectName string, reader io.Reader, md5Base64, sha256Hex string, size int64, opts PutObjectOptions) (UploadInfo, error) {
+	log.Println("Passing to putObjectDo", bucketName, objectName)
 	// Input validation.
 	if err := s3utils.CheckValidBucketName(bucketName); err != nil {
 		return UploadInfo{}, err
@@ -777,6 +786,7 @@ func (c *Client) putObjectDo(ctx context.Context, bucketName, objectName string,
 	}
 
 	// Execute PUT an objectName.
+	log.Println("Executing", http.MethodPut, fmt.Sprintf("%+v", reqMetadata))
 	resp, err := c.executeMethod(ctx, http.MethodPut, reqMetadata)
 	defer closeResponse(resp)
 	if err != nil {
@@ -791,6 +801,7 @@ func (c *Client) putObjectDo(ctx context.Context, bucketName, objectName string,
 	// extract lifecycle expiry date and rule ID
 	expTime, ruleID := amzExpirationToExpiryDateRuleID(resp.Header.Get(amzExpiration))
 	h := resp.Header
+	log.Println("returning UploadInfo")
 	return UploadInfo{
 		Bucket:           bucketName,
 		Key:              objectName,

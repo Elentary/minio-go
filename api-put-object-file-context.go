@@ -19,6 +19,7 @@ package minio
 
 import (
 	"context"
+	"log"
 	"mime"
 	"os"
 	"path/filepath"
@@ -28,6 +29,7 @@ import (
 
 // FPutObject - Create an object in a bucket, with contents from file at filePath. Allows request cancellation.
 func (c *Client) FPutObject(ctx context.Context, bucketName, objectName, filePath string, opts PutObjectOptions) (info UploadInfo, err error) {
+	log.Println("FPutObject", bucketName, objectName, filePath)
 	// Input validation.
 	if err := s3utils.CheckValidBucketName(bucketName); err != nil {
 		return UploadInfo{}, err
@@ -60,5 +62,6 @@ func (c *Client) FPutObject(ctx context.Context, bucketName, objectName, filePat
 			opts.ContentType = "application/octet-stream"
 		}
 	}
+	log.Println("Passing to PutObject", bucketName, objectName, filePath)
 	return c.PutObject(ctx, bucketName, objectName, fileReader, fileSize, opts)
 }
